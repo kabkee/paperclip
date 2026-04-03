@@ -29,7 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Check, ChevronDown, ChevronRight, Copy, Download, FilePenLine, FileText, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Code, Copy, Download, FilePenLine, FileText, MoreHorizontal, Plus, Trash2, Type, X } from "lucide-react";
 
 type DraftState = {
   key: string;
@@ -162,6 +162,7 @@ export function IssueDocumentsSection({
   const [highlightDocumentKey, setHighlightDocumentKey] = useState<string | null>(null);
   const [revisionMenuOpenKey, setRevisionMenuOpenKey] = useState<string | null>(null);
   const [selectedRevisionIds, setSelectedRevisionIds] = useState<Record<string, string | null>>({});
+  const [rawEditKeys, setRawEditKeys] = useState<Set<string>>(() => new Set());
   const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedDocumentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasScrolledToHashRef = useRef(false);
@@ -331,6 +332,18 @@ export function IssueDocumentsSection({
       isNew: false,
     });
     setError(null);
+  };
+
+  const toggleRawEdit = (key: string) => {
+    setRawEditKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   const cancelDraft = () => {
@@ -731,19 +744,59 @@ export function IssueDocumentsSection({
               placeholder="Optional title"
             />
           )}
-          <MarkdownEditor
-            value={draft.body}
-            onChange={(body) =>
-              setDraft((current) => current ? { ...current, body } : current)
-            }
-            placeholder="Markdown body"
-            bordered={false}
-            className="bg-transparent"
-            contentClassName="min-h-[220px] text-[15px] leading-7"
-            mentions={mentions}
-            imageUploadHandler={imageUploadHandler}
-            onSubmit={() => void commitDraft(draft, { clearAfterSave: false, trackAutosave: false })}
-          />
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-6 gap-1 px-2 text-[11px] text-muted-foreground",
+                !rawEditKeys.has("__new__") && "text-foreground bg-accent/60",
+              )}
+              onClick={() => rawEditKeys.has("__new__") && toggleRawEdit("__new__")}
+              title="Rich text editor"
+            >
+              <Type className="h-3 w-3" />
+              Rich text
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-6 gap-1 px-2 text-[11px] text-muted-foreground",
+                rawEditKeys.has("__new__") && "text-foreground bg-accent/60",
+              )}
+              onClick={() => !rawEditKeys.has("__new__") && toggleRawEdit("__new__")}
+              title="Raw markdown editor"
+            >
+              <Code className="h-3 w-3" />
+              Raw
+            </Button>
+          </div>
+          {rawEditKeys.has("__new__") ? (
+            <textarea
+              value={draft.body}
+              onChange={(e) =>
+                setDraft((current) => current ? { ...current, body: e.target.value } : current)
+              }
+              placeholder="Markdown body"
+              className="w-full resize-none rounded-md border border-border bg-transparent p-3 font-mono text-sm leading-6 focus:outline-none focus:ring-1 focus:ring-ring min-h-[220px]"
+              rows={12}
+            />
+          ) : (
+            <MarkdownEditor
+              value={draft.body}
+              onChange={(body) =>
+                setDraft((current) => current ? { ...current, body } : current)
+              }
+              placeholder="Markdown body"
+              bordered={false}
+              className="bg-transparent"
+              contentClassName="min-h-[220px] text-[15px] leading-7"
+              mentions={mentions}
+              imageUploadHandler={imageUploadHandler}
+              onSubmit={() => void commitDraft(draft, { clearAfterSave: false, trackAutosave: false })}
+            />
+          )}
           <div className="flex items-center justify-end gap-2">
             <Button variant="outline" size="sm" onClick={cancelDraft}>
               <X className="mr-1.5 h-3.5 w-3.5" />
@@ -799,6 +852,7 @@ export function IssueDocumentsSection({
           const displayedUpdatedAt = selectedHistoricalRevision?.createdAt ?? doc.updatedAt;
           const showTitle = !isPlanKey(doc.key) && !!displayedTitle.trim() && !titlesMatchKey(displayedTitle, doc.key);
           const canVoteOnDocument = Boolean(doc.latestRevisionId && doc.updatedByAgentId && !doc.updatedByUserId && onVote);
+          const isRawEdit = rawEditKeys.has(doc.key);
 
           return (
             <div
@@ -1068,6 +1122,36 @@ export function IssueDocumentsSection({
                       placeholder="Optional title"
                     />
                   )}
+                  {activeDraft && !isHistoricalPreview && (
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-6 gap-1 px-2 text-[11px] text-muted-foreground",
+                          !isRawEdit && "text-foreground bg-accent/60",
+                        )}
+                        onClick={() => isRawEdit && toggleRawEdit(doc.key)}
+                        title="Rich text editor"
+                      >
+                        <Type className="h-3 w-3" />
+                        Rich text
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-6 gap-1 px-2 text-[11px] text-muted-foreground",
+                          isRawEdit && "text-foreground bg-accent/60",
+                        )}
+                        onClick={() => !isRawEdit && toggleRawEdit(doc.key)}
+                        title="Raw markdown editor"
+                      >
+                        <Code className="h-3 w-3" />
+                        Raw
+                      </Button>
+                    </div>
+                  )}
                   <div
                     className={`${documentBodyShellClassName} ${documentBodyPaddingClassName} ${
                       activeDraft || isHistoricalPreview ? "" : "hover:bg-accent/10"
@@ -1077,6 +1161,32 @@ export function IssueDocumentsSection({
                       <div className="rounded-md border border-amber-500/20 bg-background/50 p-3">
                         {renderBody(displayedBody, documentBodyContentClassName)}
                       </div>
+                    ) : activeDraft && isRawEdit ? (
+                      <textarea
+                        value={displayedBody}
+                        onChange={(e) => {
+                          const body = e.target.value;
+                          markDocumentDirty(doc.key);
+                          setDraft((current) => {
+                            if (current && current.key === doc.key && !current.isNew) {
+                              return { ...current, body };
+                            }
+                            return current;
+                          });
+                        }}
+                        placeholder="Markdown body"
+                        className={cn(
+                          "w-full resize-none rounded-md border border-border bg-transparent p-3 font-mono text-sm leading-6 focus:outline-none focus:ring-1 focus:ring-ring",
+                          documentBodyContentClassName,
+                        )}
+                        rows={12}
+                        onKeyDown={async (e) => {
+                          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                            e.preventDefault();
+                            await commitDraft(activeDraft ?? draft, { clearAfterSave: false, trackAutosave: true });
+                          }
+                        }}
+                      />
                     ) : activeDraft ? (
                       <MarkdownEditor
                         value={displayedBody}
