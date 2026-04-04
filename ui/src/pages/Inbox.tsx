@@ -805,11 +805,11 @@ export function Inbox() {
   const { dismissed, dismiss } = useDismissedInboxItems();
   const { readItems, markRead: markItemRead, markUnread: markItemUnread } = useReadInboxItems();
 
-  const pathSegment = location.pathname.split("/").pop() ?? "mine";
+  const pathSegment = location.pathname.split("/").pop() ?? "recent";
   const tab: InboxTab =
     pathSegment === "mine" || pathSegment === "recent" || pathSegment === "all" || pathSegment === "unread"
-      ? pathSegment
-      : "mine";
+      ? (pathSegment === "mine" ? "recent" : pathSegment)
+      : "recent";
   const canArchiveFromTab = isMineInboxTab(tab);
   const issueLinkState = useMemo(
     () =>
@@ -1570,10 +1570,6 @@ export function Inbox() {
         <Tabs value={tab} onValueChange={(value) => navigate(`/inbox/${value}`)}>
           <PageTabBar
             items={[
-              {
-                value: "mine",
-                label: "Mine",
-              },
               {
                 value: "recent",
                 label: "Recent",

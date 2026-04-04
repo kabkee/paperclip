@@ -154,11 +154,11 @@ export function resolveIssueWorkspaceName(
 export function loadLastInboxTab(): InboxTab {
   try {
     const raw = localStorage.getItem(INBOX_LAST_TAB_KEY);
-    if (raw === "all" || raw === "unread" || raw === "recent" || raw === "mine") return raw;
-    if (raw === "new") return "mine";
-    return "mine";
+    if (raw === "all" || raw === "unread" || raw === "recent") return raw;
+    if (raw === "new" || raw === "mine") return "recent";
+    return "recent";
   } catch {
-    return "mine";
+    return "recent";
   }
 }
 
