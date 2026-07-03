@@ -5581,6 +5581,7 @@ export function issueService(db: Db) {
               eq(issues.parentId, parent.id),
               sql`lower(trim(regexp_replace(${issues.title}, '\\s+', ' ', 'g'))) = ${normalizedTitle}`,
               notInArray(issues.status, ['done', 'cancelled']),
+              isNull(issues.hiddenAt),
             ),
           );
         if (existingChild) {
@@ -6051,6 +6052,7 @@ export function issueService(db: Db) {
                   eq(issues.parentId, issueData.parentId),
                   sql`lower(trim(regexp_replace(${issues.title}, '\\s+', ' ', 'g'))) = ${normalizedTitle}`,
                   notInArray(issues.status, ['done', 'cancelled']),
+                  isNull(issues.hiddenAt),
                 ),
               );
             if (existingDuplicate) {
