@@ -630,6 +630,11 @@ function truncateInlineSummary(value: string | null | undefined, maxChars = CHIL
   return normalized.length > maxChars ? `${normalized.slice(0, Math.max(0, maxChars - 15)).trimEnd()} [truncated]` : normalized;
 }
 
+// Normalizes a title for dedup comparison: trim, lowercase, collapse whitespace.
+function normalizeIssueTitle(title: string): string {
+  return title.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function truncateByCodePoint(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
   return Array.from(value).slice(0, maxChars).join("");
@@ -5562,6 +5567,29 @@ export function issueService(db: Db) {
         actorUserId,
         ...issueData
       } = data;
+
+      // Dedup guard: return existing active child if normalized title matches.
+      // NOTE: app-level only; fully concurrent races require a DB unique index to eliminate.
+      const normalizedTitle = normalizeIssueTitle(issueData.title ?? '');
+      if (normalizedTitle) {
+        const [existingChild] = await db
+          .select()
+          .from(issues)
+          .where(
+            and(
+              eq(issues.companyId, parent.companyId),
+              eq(issues.parentId, parent.id),
+              sql`lower(trim(regexp_replace(${issues.title}, '\\s+', ' ', 'g'))) = ${normalizedTitle}`,
+              notInArray(issues.status, ['done', 'cancelled']),
+            ),
+          );
+        if (existingChild) {
+          const [enriched] = await withIssueLabels(db, [existingChild]);
+          const [withRelations] = await withIssueRelationSummaries(parent.companyId, [enriched], db);
+          return { issue: withRelations, parentBlockerAdded: false };
+        }
+      }
+
       let child = await issueService(db).create(parent.companyId, {
         ...issueData,
         parentId: parent.id,
@@ -6008,6 +6036,31 @@ export function issueService(db: Db) {
         if (executionWorkspaceId) {
           await assertValidExecutionWorkspace(companyId, issueData.projectId, executionWorkspaceId, tx);
         }
+
+        // Dedup guard: only for child issues (parentId present); top-level issues skip this to avoid false positives.
+        // NOTE: app-level only; fully concurrent races require a DB unique index to eliminate.
+        if (issueData.parentId) {
+          const normalizedTitle = normalizeIssueTitle(issueData.title ?? '');
+          if (normalizedTitle) {
+            const [existingDuplicate] = await tx
+              .select()
+              .from(issues)
+              .where(
+                and(
+                  eq(issues.companyId, companyId),
+                  eq(issues.parentId, issueData.parentId),
+                  sql`lower(trim(regexp_replace(${issues.title}, '\\s+', ' ', 'g'))) = ${normalizedTitle}`,
+                  notInArray(issues.status, ['done', 'cancelled']),
+                ),
+              );
+            if (existingDuplicate) {
+              const [enriched] = await withIssueLabels(tx, [existingDuplicate]);
+              const [withRelations] = await withIssueRelationSummaries(companyId, [enriched], tx);
+              return withRelations;
+            }
+          }
+        }
+
         // Self-correcting counter: use MAX(issue_number) + 1 if the counter
         // has drifted below the actual max, preventing identifier collisions.
         const [maxRow] = await tx
